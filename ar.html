@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR.js Physics - Rolling Cylinder - Matveeva Anna MIM-24</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <script>
+        // AR Physics animation component (scaled for AR)
+        AFRAME.registerComponent('ar-rolling-cylinder', {
+            schema: {
+                speed: {type: 'number', default: 2},
+                distance: {type: 'number', default: 3}
+            },
+            
+            init: function() {
+                this.startPosition = this.el.getAttribute('position');
+                this.currentRotation = 0;
+                this.currentDistance = 0;
+                this.direction = 1;
+                
+                // Physics constants (scaled for AR)
+                this.gravity = 9.81;
+                this.angle = Math.PI / 6; // 30 degrees
+                this.acceleration = this.gravity * Math.sin(this.angle) * 0.2;
+                this.velocity = 0;
+            },
+            
+            tick: function(time, timeDelta) {
+                const deltaTime = timeDelta / 1000 * this.data.speed;
+                
+                // Physics simulation
+                this.velocity += this.acceleration * deltaTime;
+                const deltaDistance = this.velocity * deltaTime * this.direction;
+                this.currentDistance += deltaDistance;
+                
+                // Rolling rotation
+                const cylinderRadius = 0.2; // AR scaled radius
+                const deltaRotation = deltaDistance / cylinderRadius;
+                this.currentRotation += deltaRotation;
+                
+                // Boundary check and bounce
+                if (this.currentDistance >= this.data.distance) {
+                    this.currentDistance = this.data.distance;
+                    this.direction = -1;
+                    this.velocity = Math.abs(this.velocity) * 0.7;
+                } else if (this.currentDistance <= 0) {
+                    this.currentDistance = 0;
+                    this.direction = 1;
+                    this.velocity = Math.abs(this.velocity) * 0.7;
+                }
+                
+                // Update position along incline
+                const newX = this.startPosition.x + this.currentDistance * Math.cos(-this.angle);
+                const newY = this.startPosition.y - this.currentDistance * Math.sin(-this.angle);
+                
+                this.el.setAttribute('position', {
+                    x: newX,
+                    y: newY,
+                    z: this.startPosition.z
+                });
+                
+                // Update rotation
+                this.el.setAttribute('rotation', {
+                    x: 0,
+                    y: 0,
+                    z: this.currentRotation * 180 / Math.PI
+                });
+            }
+        });
+
+        // AR Force vector component (smaller for AR)
+        AFRAME.registerComponent('ar-force-vector', {
+            schema: {
+                force: {type: 'string', default: 'gravity'},
+                color: {type: 'string', default: '#ff0000'},
+                length: {type: 'number', default: 0.8},
+                label: {type: 'string', default: 'F'}
+            },
+            
+            init: function() {
+                // Arrow shaft
+                const shaft = document.createElement('a-cylinder');
+                shaft.setAttribute('radius', '0.01');
+                shaft.setAttribute('height', this.data.length);
+                shaft.setAttribute('color', this.data.color);
+                shaft.setAttribute('position', `0 ${-this.data.length/2} 0`);
+                this.el.appendChild(shaft);
+                
+                // Arrow head
+                const head = document.createElement('a-cone');
+                head.setAttribute('radius-bottom', '0.03');
+                head.setAttribute('height', '0.1');
+                head.setAttribute('color', this.data.color);
+                head.setAttribute('position', `0 ${-this.data.length + 0.05} 0`);
+                this.el.appendChild(head);
+                
+                // Label
+                const label = document.createElement('a-text');
+                label.setAttribute('value', this.data.label);
+                label.setAttribute('position', `0.1 ${-this.data.length/2} 0`);
+                label.setAttribute('color', this.data.color);
+                label.setAttribute('scale', '0.3 0.3 0.3');
+                label.setAttribute('align', 'center');
+                this.el.appendChild(label);
+            }
+        });
+
+        // AR Controls
+        AFRAME.registerComponent('ar-physics-controls', {
+            init: function() {
+                const controls = document.createElement('div');
+                controls.innerHTML = `
+                    <div style="position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 8px; font-family: Arial; font-size: 12px; z-index: 1000; max-width: 200px;">
+                        <h4 style="margin: 0 0 8px 0;">🔬 AR Physics</h4>
+                        <div style="margin-bottom: 8px;">
+                            <strong>Point camera at Rolling Stones marker</strong>
+                        </div>
+                        <div style="font-size: 10px;">
+                            <strong>Forces:</strong><br>
+                            🔴 Gravity (mg)<br>
+                            🔵 Normal (N)<br>
+                            🟡 Friction (f)<br>
+                            <br><em>Matveeva Anna MIM-24</em>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(controls);
+            }
+        });
+    </script>
+</head>
+<body style="margin: 0; overflow: hidden;">
+    <a-scene embedded 
+             arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+             ar-physics-controls>
+        
+        <a-assets>
+            <img id="woodTexture" src="https://cdn.aframe.io/a-painter/images/wood.jpg" crossorigin="anonymous">
+            <img id="noiseTexture" src="https://cdn.aframe.io/a-painter/images/noise.jpg" crossorigin="anonymous">
+            <img id="metalTexture" src="https://cdn.aframe.io/a-painter/images/metal.jpg" crossorigin="anonymous">
+        </a-assets>
+
+        <!-- AR Marker - Rolling Stones Logo -->
+        <a-marker type="pattern" url="marker.patt">
+            <!-- Scale down and rotate for AR -->
+            <a-entity position="0 0 0" scale="0.3 0.3 0.3" rotation="-90 0 0">
+                
+                <!-- Enhanced lighting for AR -->
+                <a-light type="ambient" color="#ffffff" intensity="0.8"></a-light>
+                <a-light type="directional" position="2 3 2" color="#ffffff" intensity="1.5"></a-light>
+                
+                <!-- Inclined plane -->
+                <a-box position="0 0 0" 
+                       rotation="0 0 -30" 
+                       width="4" height="0.1" depth="0.8" 
+                       src="#noiseTexture"
+                       material="roughness: 0.9">
+                </a-box>
+
+                <!-- Rolling cylinder with AR physics -->
+                <a-cylinder position="-1.5 1 0" 
+                            radius="0.2" 
+                            height="0.4" 
+                            src="#woodTexture"
+                            rotation="0 0 90"
+                            material="roughness: 0.7; metalness: 0.1"
+                            ar-rolling-cylinder="speed: 2; distance: 3">
+                </a-cylinder>
+
+                <!-- Force Vectors (scaled for AR) -->
+                <!-- Gravity Force -->
+                <a-entity position="-1.5 1 0.3" 
+                          rotation="0 0 0"
+                          ar-force-vector="force: gravity; color: #ff0000; length: 0.8; label: mg"
+                          animation="property: position; from: -1.5 1 0.3; to: 1.5 -0.5 0.3; dur: 6000; loop: true; easing: linear">
+                </a-entity>
+
+                <!-- Normal Force -->
+                <a-entity position="-1.5 1 0.1" 
+                          rotation="0 0 60"
+                          ar-force-vector="force: normal; color: #0066ff; length: 0.6; label: N"
+                          animation="property: position; from: -1.5 1 0.1; to: 1.5 -0.5 0.1; dur: 6000; loop: true; easing: linear">
+                </a-entity>
+
+                <!-- Friction Force -->
+                <a-entity position="-1.5 1 -0.1" 
+                          rotation="0 0 150"
+                          ar-force-vector="force: friction; color: #ffaa00; length: 0.4; label: f"
+                          animation="property: position; from: -1.5 1 -0.1; to: 1.5 -0.5 -0.1; dur: 6000; loop: true; easing: linear">
+                </a-entity>
+
+                <!-- Support structures -->
+                <a-box position="-1.2 -0.2 0" 
+                       width="0.05" height="0.6" depth="0.8" 
+                       src="#metalTexture">
+                </a-box>
+                
+                <a-box position="1.2 -0.5 0" 
+                       width="0.05" height="0.3" depth="0.8" 
+                       src="#metalTexture">
+                </a-box>
+
+                <!-- Start/End markers -->
+                <a-sphere position="-1.5 1.1 0" radius="0.02" color="#ff0000"></a-sphere>
+                <a-sphere position="1.5 -0.4 0" radius="0.02" color="#00ff00"></a-sphere>
+                
+                <!-- Labels for AR -->
+                <a-text position="-1.5 1.3 0" 
+                        value="START" 
+                        color="#ff0000" 
+                        scale="0.2 0.2 0.2" 
+                        align="center">
+                </a-text>
+                
+                <a-text position="1.5 -0.2 0" 
+                        value="END" 
+                        color="#00ff00" 
+                        scale="0.2 0.2 0.2" 
+                        align="center">
+                </a-text>
+
+                <!-- Physics info for AR -->
+                <a-text position="0 2 0" 
+                        value="Rolling Cylinder Physics&#10;Forces: Gravity, Normal, Friction&#10;Angle: 30°" 
+                        align="center" 
+                        color="#2F4F4F" 
+                        scale="0.15 0.15 0.15"
+                        geometry="primitive: plane; width: 6; height: 2"
+                        material="color: #ffffff; opacity: 0.8">
+                </a-text>
+
+                <!-- Attribution -->
+                <a-text position="0 -1.5 0" 
+                        value="AR Physics Simulation&#10;Matveeva Anna MIM-24" 
+                        align="center" 
+                        color="#4169E1" 
+                        scale="0.12 0.12 0.12">
+                </a-text>
+
+            </a-entity>
+        </a-marker>
+
+        <!-- AR Camera -->
+        <a-entity camera></a-entity>
+    </a-scene>
+
+    <!-- Loading indicator -->
+    <div id="arLoadingScreen" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; font-family: Arial; z-index: 2000;">
+        <div style="text-align: center;">
+            <h2>🔬 Loading AR Physics Simulation...</h2>
+            <p>Point your camera at the Rolling Stones marker when ready</p>
+            <div style="margin: 20px;">
+                <div style="border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 2s linear infinite; margin: 0 auto;"></div>
+            </div>
+            <p style="font-size: 12px; opacity: 0.8;">Physics: Rolling cylinder on inclined plane</p>
+            <p style="font-size: 12px; opacity: 0.8;">Created by Matveeva Anna, Group MIM-24</p>
+        </div>
+    </div>
+
+    <style>
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+
+    <script>
+        // Hide loading screen when AR is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(() => {
+                const loadingScreen = document.getElementById('arLoadingScreen');
+                if (loadingScreen) {
+                    loadingScreen.style.display = 'none';
+                }
+            }, 3000);
+        });
+
+        // Handle AR marker events
+        document.querySelector('a-marker').addEventListener('markerFound', () => {
+            console.log('Rolling Stones marker found - Physics simulation started');
+        });
+
+        document.querySelector('a-marker').addEventListener('markerLost', () => {
+            console.log('Rolling Stones marker lost - Physics simulation paused');
+        });
+    </script>
+</body>
+</html>

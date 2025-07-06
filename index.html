@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VR Physics - Rolling Cylinder - Matveeva Anna MIM-24</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script>
+        // Physics animation component for rolling cylinder
+        AFRAME.registerComponent('rolling-cylinder', {
+            schema: {
+                speed: {type: 'number', default: 1},
+                distance: {type: 'number', default: 6}
+            },
+            
+            init: function() {
+                this.startPosition = {
+                    x: -3,
+                    y: 2.8,
+                    z: -2
+                };
+                this.currentRotation = 0;
+                this.currentDistance = 0;
+                this.direction = 1;
+                this.paused = false;
+                
+                // Physics constants
+                this.gravity = 9.81;
+                this.angle = Math.PI / 6; // 30 degrees
+                this.acceleration = this.gravity * Math.sin(this.angle) * 0.2;
+                this.velocity = 0;
+                
+                // Store references to force vectors
+                this.forceVectors = {
+                    gravity: null,
+                    normal: null,
+                    friction: null
+                };
+                
+                // Wait for scene to load before creating controls
+                if (this.el.sceneEl.hasLoaded) {
+                    this.createControls();
+                } else {
+                    this.el.sceneEl.addEventListener('loaded', () => {
+                        this.createControls();
+                    });
+                }
+            },
+            
+            createControls: function() {
+                const self = this;
+                
+                // Remove any existing controls
+                const existingControls = document.querySelector('#physicsControls');
+                if (existingControls) {
+                    existingControls.remove();
+                }
+                
+                const controls = document.createElement('div');
+                controls.id = 'physicsControls';
+                controls.innerHTML = `
+                    <div style="position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.8); color: white; padding: 15px; border-radius: 8px; font-family: Arial; z-index: 1000;">
+                        <h3 style="margin: 0 0 10px 0;">🔬 Physics Simulation</h3>
+                        <button id="togglePhysics" style="margin: 5px; padding: 8px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            Pause Animation
+                        </button>
+                        <button id="resetPhysics" style="margin: 5px; padding: 8px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            Reset Position
+                        </button>
+                        <br>
+                        <label style="display: block; margin: 10px 0;">
+                            Speed: <span id="speedDisplay">1</span>
+                            <input type="range" id="speedSlider" min="0.1" max="3" step="0.1" value="1" style="width: 100px;">
+                        </label>
+                        <div style="margin-top: 10px; font-size: 12px;">
+                            <strong>Forces Shown:</strong><br>
+                            🔴 Gravity (mg)<br>
+                            🔵 Normal Force (N)<br>
+                            🟡 Friction (f)<br>
+                            <br><strong>Student:</strong> Matveeva Anna MIM-24
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(controls);
+                
+                // Set up event listeners
+                setTimeout(() => {
+                    const toggleBtn = document.getElementById('togglePhysics');
+                    const resetBtn = document.getElementById('resetPhysics');
+                    const speedSlider = document.getElementById('speedSlider');
+                    const speedDisplay = document.getElementById('speedDisplay');
+                    
+                    if (toggleBtn) {
+                        toggleBtn.addEventListener('click', function() {
+                            self.paused = !self.paused;
+                            this.textContent = self.paused ? 'Resume Animation' : 'Pause Animation';
+                        });
+                    }
+                    
+                    if (resetBtn) {
+                        resetBtn.addEventListener('click', function() {
+                            self.reset();
+                        });
+                    }
+                    
+                    if (speedSlider && speedDisplay) {
+                        speedSlider.addEventListener('input', function(e) {
+                            self.data.speed = parseFloat(e.target.value);
+                            speedDisplay.textContent = e.target.value;
+                        });
+                    }
+                }, 100);
+            },
+            
+            reset: function() {
+                // Reset cylinder position
+                this.el.setAttribute('position', `${this.startPosition.x} ${this.startPosition.y} ${this.startPosition.z}`);
+                this.currentRotation = 0;
+                this.currentDistance = 0;
+                this.direction = 1;
+                this.velocity = 0;
+                this.el.setAttribute('rotation', '0 90 90');
+                
+                // Reset force vectors
+                const vectors = this.el.sceneEl.querySelectorAll('[force-vector]');
+                vectors.forEach(vector => {
+                    const forceType = vector.getAttribute('force-vector').force;
+                    if (forceType === 'gravity') {
+                        vector.setAttribute('position', '-3 2.8 -0.5');
+                    } else if (forceType === 'normal') {
+                        vector.setAttribute('position', '-3 2.8 -1.2');
+                    } else if (forceType === 'friction') {
+                        vector.setAttribute('position', '-3 2.8 -3');
+                    }
+                });
+            },
+            
+            tick: function(time, timeDelta) {
+                if (this.paused || !timeDelta) return;
+                
+                const deltaTime = (timeDelta / 1000) * this.data.speed;
+                
+                // Physics simulation
+                if (this.direction === 1) {
+                    // Rolling down
+                    this.velocity += this.acceleration * deltaTime;
+                } else {
+                    // Rolling up (deceleration)
+                    this.velocity -= this.acceleration * deltaTime;
+                    
+                    // Stop and reverse when velocity reaches zero
+                    if (this.velocity <= 0) {
+                        this.velocity = 0;
+                        this.direction = 1;
+                    }
+                }
+                
+                // Update distance
+                const deltaDistance = this.velocity * deltaTime;
+                this.currentDistance += deltaDistance;
+                
+                // Bounce at bottom
+                if (this.currentDistance >= this.data.distance) {
+                    this.currentDistance = this.data.distance;
+                    this.direction = -1;
+                    this.velocity = Math.abs(this.velocity) * 0.7; // Energy loss
+                }
+                
+                // Reset at top
+                if (this.currentDistance <= 0) {
+                    this.currentDistance = 0;
+                    this.velocity = 0;
+                    this.direction = 1;
+                }
+                
+                // Calculate position along incline
+                const angle = Math.PI / 6;
+                const newX = this.startPosition.x + this.currentDistance * Math.cos(angle);
+                const newY = this.startPosition.y - this.currentDistance * Math.sin(angle);
+                
+                // Update cylinder position
+                this.el.setAttribute('position', {
+                    x: newX,
+                    y: newY,
+                    z: this.startPosition.z
+                });
+                
+                // Update rotation for rolling
+                const cylinderRadius = 0.8;
+                const deltaRotation = deltaDistance / cylinderRadius;
+                this.currentRotation += deltaRotation;
+                
+                // Rotate around X axis (cylinder's axis when oriented with 0 90 90)
+                this.el.setAttribute('rotation', {
+                    x: this.currentRotation * 180 / Math.PI,
+                    y: 90,
+                    z: 90
+                });
+                
+                // Update force vectors to follow cylinder
+                const vectors = this.el.sceneEl.querySelectorAll('[force-vector]');
+                vectors.forEach(vector => {
+                    const forceType = vector.getAttribute('force-vector').force;
+                    if (forceType === 'gravity') {
+                        vector.setAttribute('position', `${newX} ${newY} -0.5`);
+                    } else if (forceType === 'normal') {
+                        vector.setAttribute('position', `${newX} ${newY} -1.2`);
+                    } else if (forceType === 'friction') {
+                        vector.setAttribute('position', `${newX} ${newY} -3`);
+                    }
+                });
+            }
+        });
+
+        // Force vector component
+        AFRAME.registerComponent('force-vector', {
+            schema: {
+                force: {type: 'string', default: 'gravity'},
+                color: {type: 'string', default: '#ff0000'},
+                length: {type: 'number', default: 2},
+                label: {type: 'string', default: 'F'}
+            },
+            
+            init: function() {
+                // Create arrow shaft
+                const shaft = document.createElement('a-cylinder');
+                shaft.setAttribute('radius', '0.03');
+                shaft.setAttribute('height', this.data.length);
+                shaft.setAttribute('color', this.data.color);
+                shaft.setAttribute('position', `0 ${-this.data.length/2} 0`);
+                shaft.setAttribute('material', `emissive: ${this.data.color}; emissiveIntensity: 0.3`);
+                this.el.appendChild(shaft);
+                
+                // Create arrow head
+                const head = document.createElement('a-cone');
+                head.setAttribute('radius-bottom', '0.1');
+                head.setAttribute('height', '0.3');
+                head.setAttribute('color', this.data.color);
+                head.setAttribute('position', `0 ${-this.data.length + 0.15} 0`);
+                head.setAttribute('material', `emissive: ${this.data.color}; emissiveIntensity: 0.3`);
+                this.el.appendChild(head);
+                
+                // Create label
+                const label = document.createElement('a-text');
+                label.setAttribute('value', this.data.label);
+                label.setAttribute('position', `0.3 ${-this.data.length/2} 0`);
+                label.setAttribute('color', this.data.color);
+                label.setAttribute('scale', '1 1 1');
+                label.setAttribute('align', 'center');
+                this.el.appendChild(label);
+            }
+        });
+    </script>
+</head>
+<body>
+    <a-scene background="color: #87CEEB" fog="type: linear; color: #87CEEB; near: 20; far: 60">
+        <a-assets>
+            <!-- Textures from A-Frame sample assets -->
+            <img id="woodTexture" src="https://cdn.aframe.io/a-painter/images/wood.jpg" crossorigin="anonymous">
+            <img id="noiseTexture" src="https://cdn.aframe.io/a-painter/images/noise.jpg" crossorigin="anonymous">
+            <img id="metalTexture" src="https://cdn.aframe.io/a-painter/images/metal.jpg" crossorigin="anonymous">
+        </a-assets>
+
+        <!-- Enhanced Lighting -->
+        <a-light type="ambient" color="#ffffff" intensity="1.8"></a-light>
+        <a-light type="directional" position="5 10 5" color="#ffffff" intensity="3.5" castShadow="true"></a-light>
+        <a-light type="point" position="0 5 0" color="#ffdd88" intensity="2.5"></a-light>
+        <a-light type="directional" position="-5 8 3" color="#ffffff" intensity="3"></a-light>
+        <a-light type="point" position="3 3 -2" color="#ffffff" intensity="2"></a-light>
+
+        <!-- Ground plane -->
+        <a-plane position="0 -2 0" 
+                 rotation="-90 0 0" 
+                 width="30" height="30" 
+                 material="color: #228B22; roughness: 0.9"
+                 repeat="6 6" 
+                 receiveShadow="true">
+        </a-plane>
+
+        <!-- Inclined plane - made solid and wider -->
+        <a-entity position="0 0 -2" rotation="0 0 -30">
+            <!-- Main incline surface -->
+            <a-box position="0 0 0" 
+                   width="10" height="0.4" depth="3.5" 
+                   material="color: #2F4F4F; roughness: 0.9; metalness: 0.1"
+                   castShadow="true"
+                   receiveShadow="true">
+            </a-box>
+            
+            <!-- Side rails to prevent cylinder from falling off -->
+            <a-box position="0 0.3 1.75" 
+                   width="10" height="0.4" depth="0.1" 
+                   material="color: #1C1C1C; roughness: 0.9">
+            </a-box>
+            <a-box position="0 0.3 -1.75" 
+                   width="10" height="0.4" depth="0.1" 
+                   material="color: #1C1C1C; roughness: 0.9">
+            </a-box>
+        </a-entity>
+
+        <!-- Rolling cylinder with physics -->
+        <a-cylinder position="-3 2.8 -2" 
+                    radius="0.8" 
+                    height="1.5" 
+                    material="color: #F5DEB3; roughness: 0.6; metalness: 0.1"
+                    rotation="0 90 90"
+                    rolling-cylinder="speed: 1; distance: 6"
+                    castShadow="true">
+            <!-- Red stripe for rotation visibility -->
+            <a-box position="0 0 0.81" 
+                   width="1.5" height="0.1" depth="0.02" 
+                   material="color: #DC143C; emissive: #DC143C; emissiveIntensity: 0.3">
+            </a-box>
+            <!-- Blue dot on one end -->
+            <a-circle position="0.76 0 0" 
+                      radius="0.3" 
+                      rotation="0 90 0"
+                      material="color: #1E90FF; emissive: #1E90FF; emissiveIntensity: 0.3">
+            </a-circle>
+        </a-cylinder>
+
+        <!-- Force Vectors (moved further from cylinder) -->
+        <!-- Gravity Force (downward, red) -->
+        <a-entity position="-3 2.8 -0.5" 
+                  rotation="0 0 0"
+                  force-vector="force: gravity; color: #ff0000; length: 2; label: mg">
+        </a-entity>
+
+        <!-- Normal Force (perpendicular to surface, blue) -->
+        <a-entity position="-3 2.8 -1.2" 
+                  rotation="0 0 60"
+                  force-vector="force: normal; color: #0066ff; length: 1.5; label: N">
+        </a-entity>
+
+        <!-- Friction Force (opposing motion, yellow) -->
+        <a-entity position="-3 2.8 -3" 
+                  rotation="0 0 150"
+                  force-vector="force: friction; color: #ffaa00; length: 1; label: f">
+        </a-entity>
+
+        <!-- Information panel -->
+        <a-text position="7 3 -8" 
+                value="Physics Simulation&#10;Rolling Cylinder on Inclined Plane&#10;&#10;Forces:&#10;🔴 Gravity (mg) - downward&#10;🔵 Normal Force (N) - perpendicular&#10;🟡 Friction (f) - opposing motion&#10;&#10;The cylinder accelerates down&#10;due to gravitational component&#10;along the incline.&#10;&#10;Created by Matveeva Anna&#10;Group MIM-24" 
+                align="left" 
+                color="#2F4F4F" 
+                scale="0.6 0.6 0.6"
+                geometry="primitive: plane; width: 5; height: 6"
+                material="color: #ffffff; opacity: 0.95">
+        </a-text>
+
+        <!-- Physics formulas display -->
+        <a-text position="-8 3 -6" 
+                value="Physics Formulas:&#10;&#10;a = g × sin(θ)&#10;F_gravity = mg&#10;F_normal = mg × cos(θ)&#10;F_friction = μ × N&#10;&#10;Where:&#10;g = 9.81 m/s²&#10;θ = 30° (incline angle)&#10;μ = coefficient of friction" 
+                align="left" 
+                color="#8B4513" 
+                scale="0.5 0.5 0.5"
+                geometry="primitive: plane; width: 4; height: 4.5"
+                material="color: #f0f8ff; emissive: #f0f8ff; emissiveIntensity: 0.3; opacity: 0.95">
+        </a-text>
+
+        <!-- Measurement markers -->
+        <a-sphere position="-3 3 -2" radius="0.1" color="#ff0000" material="emissive: #ff0000; emissiveIntensity: 0.6"></a-sphere>
+        <a-sphere position="3 -0.5 -2" radius="0.1" color="#00ff00" material="emissive: #00ff00; emissiveIntensity: 0.6"></a-sphere>
+        <a-text position="-3 3.6 -2" value="START" color="#ff0000" scale="0.8 0.8 0.8" align="center"></a-text>
+        <a-text position="3 0.1 -2" value="END" color="#00ff00" scale="0.8 0.8 0.8" align="center"></a-text>
+
+        <!-- Coordinate axes (bottom left) -->
+        <a-entity position="-8 -1 0">
+            <!-- X axis - red -->
+            <a-cylinder position="0.5 0 0" rotation="0 0 -90" radius="0.02" height="1" color="#ff0000"></a-cylinder>
+            <a-cone position="1 0 0" rotation="0 0 -90" radius-bottom="0.08" height="0.2" color="#ff0000"></a-cone>
+            <a-text position="1.2 0 0" value="X" color="#ff0000" scale="0.5 0.5 0.5"></a-text>
+            
+            <!-- Y axis - green -->
+            <a-cylinder position="0 0.5 0" rotation="0 0 0" radius="0.02" height="1" color="#00ff00"></a-cylinder>
+            <a-cone position="0 1 0" rotation="0 0 0" radius-bottom="0.08" height="0.2" color="#00ff00"></a-cone>
+            <a-text position="0 1.2 0" value="Y" color="#00ff00" scale="0.5 0.5 0.5"></a-text>
+            
+            <!-- Z axis - blue -->
+            <a-cylinder position="0 0 0.5" rotation="90 0 0" radius="0.02" height="1" color="#0000ff"></a-cylinder>
+            <a-cone position="0 0 1" rotation="90 0 0" radius-bottom="0.08" height="0.2" color="#0000ff"></a-cone>
+            <a-text position="0 0 1.2" value="Z" color="#0000ff" scale="0.5 0.5 0.5"></a-text>
+            
+            <!-- Origin sphere -->
+            <a-sphere position="0 0 0" radius="0.05" color="#ffffff"></a-sphere>
+        </a-entity>
+
+        <!-- Camera with free movement -->
+        <a-entity id="rig" position="0 3 6">
+            <a-camera look-controls wasd-controls 
+                      fov="60"
+                      wasd-controls-enabled="true"
+                      look-controls-enabled="true">
+            </a-camera>
+        </a-entity>
+    </a-scene>
+</body>
+</html>
